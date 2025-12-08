@@ -30,6 +30,30 @@ Explanation:
 - The server also exposes a small lobby protocol: upon connecting a client can request the available games by sending `{ "type": "list" }`, or join a specific game with `{ "type": "join", "game": "rps" }`.
 - A new simple game `RPS` (Rock-Paper-Scissors) is implemented as `RPSGame`. Each player sends a `{ "type": "choice", "move": "rock" }` and the server computes the winner and sends a `game_over` message showing each player's choice and the result.
 
+Key server snippets (illustrative):
+
+```python
+# waiting lists keyed by game name
+self.waiting = { 'tictactoe': [], 'rps': [] }
+
+# when two clients join the same game we create the appropriate game thread
+if game_name == 'tictactoe':
+  game = Game(p1_conn, p2_conn)
+elif game_name == 'rps':
+  game = RPSGame(p1_conn, p2_conn)
+```
+
+RPS judge (simplified):
+
+```python
+def judge(self, a, b):
+  mapping = {'rock':0, 'paper':1, 'scissors':2}
+  va, vb = mapping[a], mapping[b]
+  if va == vb: return 'draw','draw'
+  if (va - vb) % 3 == 1: return 'win','loss'
+  return 'loss','win'
+```
+
 ---
 
 **`client.py`**
@@ -43,6 +67,17 @@ Explanation:
 - When it receives `your_turn` it prints the board and prompts the user to enter a move 0–8.
 - It sends moves as JSON objects: `{ "type": "move", "pos": 4 }`.
 - It prints updates and the final game result.
+
+Client UI improvements and snippets:
+
+```python
+def prompt_move(board, you):
+  # accepts single index like '4' or row/col like '1 2' or '1,2'
+  raw = input(f"Your move ({you}) — enter 0-8, or q to quit: ")
+  # validation: range, occupancy, and helpful error messages
+```
+
+The client also implements a small lobby flow: it requests the server's available games (`{type:'list'}`) and sends `{type:'join', game:'rps'}` to join RPS. For RPS the client prompts for `rock/paper/scissors` and sends `{type:'choice', move:...}`.
 
 ---
 
@@ -130,6 +165,18 @@ Game over: loss
  3 | X | 5 
 ---+---+---
  O | X | O 
+
+### RPS sample run
+
+I also tested the Rock-Paper-Scissors game with two small test clients. Sample responses received by the two clients were:
+
+- Client 1 (sent `rock`):
+
+  {"type": "game_over", "result": "loss", "choice": "rock", "opponent": "paper"}
+
+- Client 2 (sent `paper`):
+
+  {"type": "game_over", "result": "win", "choice": "paper", "opponent": "rock"}
 
 
 ## Conclusion
