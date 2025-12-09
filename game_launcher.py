@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""
+Game Launcher
+Menu to choose between Tic-Tac-Toe and Rock Paper Scissors games.
+"""
+
+import subprocess
+import sys
+import time
+
+def print_menu():
+    """Print the game selection menu."""
+    print("\n" + "="*50)
+    print("  GAME LAUNCHER")
+    print("="*50)
+    print("\nChoose a game to play:")
+    print("  1. Tic-Tac-Toe")
+    print("  2. Rock Paper Scissors")
+    print("  3. Exit")
+    print("\n" + "="*50)
+
+def start_server(server_script, port):
+    """Start a game server in the background."""
+    try:
+        # Start server process
+        if sys.platform == 'win32':
+            # Windows
+            process = subprocess.Popen(
+                [sys.executable, server_script],
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+        else:
+            # Unix/Linux/Mac
+            process = subprocess.Popen(
+                [sys.executable, server_script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+        
+        # Give server time to start
+        time.sleep(1)
+        return process
+    except Exception as e:
+        print(f"Error starting server: {e}")
+        return None
+
+def start_client(client_script, host='localhost', port=None):
+    """Start a game client."""
+    try:
+        if port:
+            subprocess.run([sys.executable, client_script, host, str(port)])
+        else:
+            subprocess.run([sys.executable, client_script, host])
+    except KeyboardInterrupt:
+        print("\nClient closed.")
+    except Exception as e:
+        print(f"Error starting client: {e}")
+
+def main():
+    """Main launcher function."""
+    server_process = None
+    
+    try:
+        while True:
+            print_menu()
+            choice = input("Enter your choice (1-3): ").strip()
+            
+            if choice == '1':
+                # Tic-Tac-Toe
+                print("\nStarting Tic-Tac-Toe game...")
+                print("Note: You'll need to open another terminal/console to run a second client.")
+                
+                # Start server
+                server_process = start_server('server.py', 8888)
+                if server_process:
+                    print("Tic-Tac-Toe server started on port 8888")
+                    print("\nStarting client...")
+                    print("="*50)
+                    start_client('client.py', 'localhost', 8888)
+                else:
+                    print("Failed to start server. Make sure port 8888 is available.")
+            
+            elif choice == '2':
+                # Rock Paper Scissors
+                print("\nStarting Rock Paper Scissors game...")
+                print("Note: You'll need to open another terminal/console to run a second client.")
+                
+                # Start server
+                server_process = start_server('rps_server.py', 8889)
+                if server_process:
+                    print("Rock Paper Scissors server started on port 8889")
+                    print("\nStarting client...")
+                    print("="*50)
+                    start_client('rps_client.py', 'localhost', 8889)
+                else:
+                    print("Failed to start server. Make sure port 8889 is available.")
+            
+            elif choice == '3':
+                print("\nExiting...")
+                break
+            
+            else:
+                print("\nInvalid choice. Please enter 1, 2, or 3.")
+            
+            # Clean up server process if it exists
+            if server_process:
+                try:
+                    server_process.terminate()
+                    server_process.wait(timeout=2)
+                except:
+                    try:
+                        server_process.kill()
+                    except:
+                        pass
+                server_process = None
+            
+            print("\n")
+    
+    except KeyboardInterrupt:
+        print("\n\nExiting...")
+    finally:
+        # Clean up server process
+        if server_process:
+            try:
+                server_process.terminate()
+                server_process.wait(timeout=2)
+            except:
+                try:
+                    server_process.kill()
+                except:
+                    pass
+
+if __name__ == "__main__":
+    main()
