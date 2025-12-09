@@ -59,6 +59,7 @@ class Game(threading.Thread):
 
         game_over = False
         winner = None
+        disconnected_player = None
 
         while not game_over:
             cur_sock, cur_rfile = players[self.current]
@@ -70,8 +71,8 @@ class Game(threading.Thread):
 
             msg = recv_json(cur_rfile)
             if msg is None:
-                # disconnected
-                winner = other
+                # current player disconnected (closed socket). Mark and end loop.
+                disconnected_player = self.current
                 game_over = True
                 break
 
@@ -108,15 +109,29 @@ class Game(threading.Thread):
                 send_json(self.p1, { 'type': 'update', 'board': self.board, 'next': self.current })
                 send_json(self.p2, { 'type': 'update', 'board': self.board, 'next': self.current })
 
-        # game finished
-        if winner is None:
-            res1 = res2 = 'draw'
+        # game finished — handle normal win/draw or a disconnection specially
+        if disconnected_player is not None:
+            # Inform the remaining player that opponent disconnected
+            if disconnected_player == 'X':
+                # X disconnected => p2 remains
+                try:
+                    send_json(self.p2, { 'type': 'game_over', 'result': 'opponent_disconnected', 'board': self.board })
+                except Exception:
+                    pass
+            else:
+                try:
+                    send_json(self.p1, { 'type': 'game_over', 'result': 'opponent_disconnected', 'board': self.board })
+                except Exception:
+                    pass
         else:
-            res1 = 'win' if winner == 'X' else 'loss'
-            res2 = 'win' if winner == 'O' else 'loss'
+            if winner is None:
+                res1 = res2 = 'draw'
+            else:
+                res1 = 'win' if winner == 'X' else 'loss'
+                res2 = 'win' if winner == 'O' else 'loss'
 
-        send_json(self.p1, { 'type': 'game_over', 'result': res1, 'board': self.board })
-        send_json(self.p2, { 'type': 'game_over', 'result': res2, 'board': self.board })
+            send_json(self.p1, { 'type': 'game_over', 'result': res1, 'board': self.board })
+            send_json(self.p2, { 'type': 'game_over', 'result': res2, 'board': self.board })
 
         try:
             self.p1.close()
@@ -193,6 +208,11 @@ class GameServer:
                     continue
                 with self.lock:
                     self.waiting[game_name].append((conn, rfile))
+                    # acknowledge join so client knows it's in the lobby
+                    try:
+                        send_json(conn, {'type': 'joined', 'game': game_name})
+                    except Exception:
+                        pass
                     if len(self.waiting[game_name]) >= 2:
                         p1_conn, p1_r = self.waiting[game_name].pop(0)
                         p2_conn, p2_r = self.waiting[game_name].pop(0)

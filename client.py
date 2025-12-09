@@ -6,6 +6,7 @@ Connects to the server, receives updates and sends moves typed by the user.
 import socket
 import json
 import argparse
+import sys
 
 HOST = '127.0.0.1'
 PORT = 65432
@@ -91,12 +92,17 @@ def run(host, port):
         print('\nAvailable games:')
         for g in games:
             print(' -', g)
-        # choose game
-        choice = input('Enter game to join (default: tictactoe): ').strip() or 'tictactoe'
-        if choice not in games:
-            print('Unknown game, defaulting to tictactoe')
+        # choose game. If stdin is not interactive (no tty), auto-join default.
+        if not sys.stdin.isatty():
             choice = 'tictactoe'
+            print('No interactive terminal detected — auto-joining tictactoe')
+        else:
+            choice = input('Enter game to join (default: tictactoe): ').strip() or 'tictactoe'
+            if choice not in games:
+                print('Unknown game, defaulting to tictactoe')
+                choice = 'tictactoe'
         send_json(s, { 'type': 'join', 'game': choice })
+        print(f"Joined '{choice}' — waiting for opponent...")
         while True:
             line = rfile.readline()
             if not line:
@@ -104,6 +110,10 @@ def run(host, port):
                 break
             msg = json.loads(line)
             t = msg.get('type')
+            if t == 'joined':
+                # server acknowledgement
+                print(f"Server: joined lobby for game '{msg.get('game')}'")
+                continue
             if t == 'start':
                 # server indicates which game we're in
                 g = msg.get('game', 'tictactoe')
@@ -112,12 +122,18 @@ def run(host, port):
                     print('\nRock-Paper-Scissors game started. You are', you)
                     print('Choose: rock, paper, scissors (or r/p/s)')
                     # prompt and send choice
-                    while True:
-                        ch = input('Your choice: ').strip().lower()
-                        if ch in ('rock','paper','scissors','r','p','s'):
-                            send_json(s, { 'type': 'choice', 'move': ch })
-                            break
-                        print('Invalid choice; try rock/paper/scissors')
+                    if not sys.stdin.isatty():
+                        # non-interactive — choose rock by default
+                        ch = 'rock'
+                        print('No TTY: auto-choice ->', ch)
+                        send_json(s, { 'type': 'choice', 'move': ch })
+                    else:
+                        while True:
+                            ch = input('Your choice: ').strip().lower()
+                            if ch in ('rock','paper','scissors','r','p','s'):
+                                send_json(s, { 'type': 'choice', 'move': ch })
+                                break
+                            print('Invalid choice; try rock/paper/scissors')
                     continue
                 else:
                     you = msg.get('you')
