@@ -1,195 +1,171 @@
 #!/usr/bin/env python3
 """
-Tic-Tac-Toe Client
-Connects to the server and provides a user interface for playing Tic-Tac-Toe.
+Simple interactive Tic-Tac-Toe client.
+Connects to the server, receives updates and sends moves typed by the user.
 """
-
 import socket
 import json
-import threading
+import argparse
 import sys
 
-class TicTacToeClient:
-    """Client class that connects to the server and handles user interaction."""
-    
-    def __init__(self, host='localhost', port=8888):
-        self.host = host
-        self.port = port
-        self.socket = None
-        self.symbol = None
-        self.game_id = None
-        self.running = True
-        
-    def connect(self):
-        """Connect to the server."""
+HOST = '127.0.0.1'
+PORT = 65432
+
+
+def send_json(sock, obj):
+    sock.sendall((json.dumps(obj) + "\n").encode())
+
+
+def print_board(board):
+    # prettier board rendering with clear separators and indices for empty cells
+    def c(i):
+        return board[i] if board[i] != ' ' else str(i)
+    sep = '\n' + '───┼───┼───' + '\n'
+    row0 = f" {c(0)} │ {c(1)} │ {c(2)} "
+    row1 = f" {c(3)} │ {c(4)} │ {c(5)} "
+    row2 = f" {c(6)} │ {c(7)} │ {c(8)} "
+    print(row0 + sep + row1 + sep + row2)
+
+
+def prompt_move(board, you):
+    """Prompt the user for a move with validation. Returns int 0-8 or None to quit."""
+    while True:
         try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect((self.host, self.port))
-            print(f"Connected to server at {self.host}:{self.port}")
-            return True
-        except Exception as e:
-            print(f"Error connecting to server: {e}")
-            return False
-    
-    def send_message(self, message):
-        """Send a JSON message to the server."""
+            raw = input(f"Your move ({you}) — enter 0-8, or q to quit: ").strip()
+        except EOFError:
+            # treat EOF (piped input exhausted) as a quit
+            print('\nInput closed — quitting.')
+            return None
+        if raw.lower() in ('q', 'quit', 'exit'):
+            return None
+        # allow row,col like 0,2 or '1 2'
+        if ',' in raw:
+            parts = [p.strip() for p in raw.split(',') if p.strip()]
+        else:
+            parts = raw.split()
         try:
-            data = json.dumps(message).encode('utf-8')
-            self.socket.sendall(data + b'\n')
-        except Exception as e:
-            print(f"Error sending message: {e}")
-    
-    def receive_messages(self):
-        """Receive and process messages from the server."""
-        buffer = ""
-        while self.running:
-            try:
-                data = self.socket.recv(1024).decode('utf-8')
-                if not data:
-                    break
-                
-                buffer += data
-                while '\n' in buffer:
-                    line, buffer = buffer.split('\n', 1)
-                    if line:
-                        self.handle_message(json.loads(line))
-            
-            except json.JSONDecodeError:
-                continue
-            except Exception as e:
-                if self.running:
-                    print(f"Error receiving message: {e}")
-                break
-        
-        print("\nDisconnected from server.")
-        self.running = False
-    
-    def handle_message(self, message):
-        """Handle incoming messages from the server."""
-        msg_type = message.get("type")
-        
-        if msg_type == "game_joined":
-            self.game_id = message.get("game_id")
-            self.symbol = message.get("symbol")
-            print(f"\n=== Joined Game #{self.game_id} ===")
-            print(f"You are playing as: {self.symbol}")
-            self.display_board(message.get("board"))
-            print(f"\n{message.get('status')}")
-        
-        elif msg_type == "game_start":
-            print("\n=== Game Started! ===")
-            self.display_board(message.get("board"))
-            print(f"\n{message.get('status')}")
-            if message.get("your_turn"):
-                print("It's your turn! Enter your move (row col): ")
-        
-        elif msg_type == "move_response":
-            if not message.get("success"):
-                print(f"\nError: {message.get('message')}")
-                print("Please try again.")
-            else:
-                self.display_board(message.get("board"))
-                print(f"\n{message.get('status')}")
-        
-        elif msg_type == "board_update":
-            print("\n=== Board Updated ===")
-            self.display_board(message.get("board"))
-            print(f"\n{message.get('status')}")
-            
-            if message.get("game_over"):
-                winner = message.get("winner")
-                if winner == "DRAW":
-                    print("\n*** GAME ENDED IN A DRAW! ***")
-                elif winner == self.symbol:
-                    print(f"\n*** CONGRATULATIONS! YOU WON! ***")
+            if len(parts) == 1:
+                pos = int(parts[0])
+            elif len(parts) == 2:
+                r = int(parts[0]); c = int(parts[1])
+                if 0 <= r <= 2 and 0 <= c <= 2:
+                    pos = r*3 + c
                 else:
-                    print(f"\n*** GAME OVER - YOU LOST! ***")
-                print("\nPress Enter to exit...")
-                self.running = False
-            elif message.get("your_turn"):
-                print("It's your turn! Enter your move (row col): ")
-        
-        elif msg_type == "status_update":
-            self.display_board(message.get("board"))
-            print(f"\n{message.get('status')}")
-            if message.get("your_turn"):
-                print("It's your turn! Enter your move (row col): ")
-        
-        elif msg_type == "error":
-            print(f"\nError: {message.get('message')}")
-    
-    def display_board(self, board):
-        """Display the game board in a formatted way."""
-        print("\nCurrent Board:")
-        print("   0   1   2")
-        for i, row in enumerate(board):
-            print(f"{i}  {' | '.join(row)}")
-            if i < 2:
-                print("  " + "-" * 9)
-    
-    def get_user_move(self):
-        """Get a move from the user."""
-        while self.running:
-            try:
-                user_input = input().strip()
-                if not user_input:
+                    print('Row/col out of range (use 0-2).')
                     continue
-                
-                # Parse input
-                parts = user_input.split()
-                if len(parts) != 2:
-                    print("Invalid input. Please enter row and column (e.g., '1 2'): ")
+            else:
+                print('Invalid input format.')
+                continue
+        except ValueError:
+            print('Please enter numbers like "4" or "1 2".')
+            continue
+
+        if pos < 0 or pos > 8:
+            print('Position out of range (0-8).')
+            continue
+        if board[pos] != ' ':
+            print('Cell occupied — choose another.')
+            continue
+        return pos
+
+
+def run(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((host, port))
+        rfile = s.makefile('r')
+        print('Connected to server')
+        you = None
+
+        # Lobby: ask server for available games
+        send_json(s, { 'type': 'list' })
+        # read until we get a 'list' response
+        games = None
+        while True:
+            line = rfile.readline()
+            if not line:
+                print('Server closed connection')
+                return
+            msg = json.loads(line)
+            if msg.get('type') == 'list':
+                games = msg.get('games', [])
+                break
+        print('\nAvailable games:')
+        for g in games:
+            print(' -', g)
+        # choose game. If stdin is not interactive (no tty), auto-join default.
+        if not sys.stdin.isatty():
+            choice = 'tictactoe'
+            print('No interactive terminal detected — auto-joining tictactoe')
+        else:
+            choice = input('Enter game to join (default: tictactoe): ').strip() or 'tictactoe'
+            if choice not in games:
+                print('Unknown game, defaulting to tictactoe')
+                choice = 'tictactoe'
+        send_json(s, { 'type': 'join', 'game': choice })
+        print(f"Joined '{choice}' — waiting for opponent...")
+        while True:
+            line = rfile.readline()
+            if not line:
+                print('Server closed connection')
+                break
+            msg = json.loads(line)
+            t = msg.get('type')
+            if t == 'joined':
+                # server acknowledgement
+                print(f"Server: joined lobby for game '{msg.get('game')}'")
+                continue
+            if t == 'start':
+                # server indicates which game we're in
+                g = msg.get('game', 'tictactoe')
+                if g == 'rps':
+                    you = msg.get('you')
+                    print('\nRock-Paper-Scissors game started. You are', you)
+                    print('Choose: rock, paper, scissors (or r/p/s)')
+                    # prompt and send choice
+                    if not sys.stdin.isatty():
+                        # non-interactive — choose rock by default
+                        ch = 'rock'
+                        print('No TTY: auto-choice ->', ch)
+                        send_json(s, { 'type': 'choice', 'move': ch })
+                    else:
+                        while True:
+                            ch = input('Your choice: ').strip().lower()
+                            if ch in ('rock','paper','scissors','r','p','s'):
+                                send_json(s, { 'type': 'choice', 'move': ch })
+                                break
+                            print('Invalid choice; try rock/paper/scissors')
                     continue
-                
-                try:
-                    row = int(parts[0])
-                    col = int(parts[1])
-                    
-                    # Send move to server
-                    self.send_message({
-                        "type": "move",
-                        "row": row,
-                        "col": col
-                    })
-                except ValueError:
-                    print("Invalid input. Please enter numbers for row and column: ")
-            
-            except EOFError:
+                else:
+                    you = msg.get('you')
+                    print('Game started. You are', you)
+                    print_board(msg.get('board', [' ']*9))
+            elif t == 'your_turn':
+                board = msg.get('board')
+                print('\nYour turn')
+                print_board(board)
+                posi = prompt_move(board, you)
+                if posi is None:
+                    print('Quitting game.')
+                    break
+                send_json(s, { 'type': 'move', 'pos': posi })
+            elif t == 'wait':
+                print('\nWaiting for opponent...')
+            elif t == 'update':
+                print('\nBoard updated. Next:', msg.get('next'))
+                print_board(msg.get('board'))
+            elif t == 'invalid':
+                print('Invalid move:', msg.get('reason'))
+            elif t == 'game_over':
+                print('\nGame over:', msg.get('result'))
+                print_board(msg.get('board'))
                 break
-            except KeyboardInterrupt:
-                print("\nExiting...")
-                self.running = False
-                break
-    
-    def run(self):
-        """Main client loop."""
-        if not self.connect():
-            return
-        
-        # Start receiving messages in a separate thread
-        receive_thread = threading.Thread(target=self.receive_messages)
-        receive_thread.daemon = True
-        receive_thread.start()
-        
-        # Main loop for getting user input
-        try:
-            self.get_user_move()
-        except KeyboardInterrupt:
-            print("\nExiting...")
-        finally:
-            self.running = False
-            if self.socket:
-                self.socket.close()
+            else:
+                print('Unknown message:', msg)
 
-if __name__ == "__main__":
-    host = 'localhost'
-    port = 8888
-    
-    if len(sys.argv) > 1:
-        host = sys.argv[1]
-    if len(sys.argv) > 2:
-        port = int(sys.argv[2])
-    
-    client = TicTacToeClient(host, port)
-    client.run()
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', default=HOST)
+    parser.add_argument('--port', type=int, default=PORT)
+    args = parser.parse_args()
+    run(args.host, args.port)

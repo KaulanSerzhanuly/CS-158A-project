@@ -19,23 +19,43 @@ def print_menu():
     print("  3. Exit")
     print("\n" + "="*50)
 
-def start_server(server_script, port):
-    """Start a game server in the background."""
+def start_server(server_script, port, use_flags=False):
+    """Start a game server in the background.
+    
+    Args:
+        server_script: Path to the server script
+        port: Port number to start the server on
+        use_flags: If True, use --port flag (for server.py).
+                   If False, use positional argument (for rps_server.py).
+    """
     try:
         # Start server process
         if sys.platform == 'win32':
             # Windows
-            process = subprocess.Popen(
-                [sys.executable, server_script],
-                creationflags=subprocess.CREATE_NEW_CONSOLE
-            )
+            if use_flags:
+                process = subprocess.Popen(
+                    [sys.executable, server_script, '--port', str(port)],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
+            else:
+                process = subprocess.Popen(
+                    [sys.executable, server_script],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
         else:
             # Unix/Linux/Mac
-            process = subprocess.Popen(
-                [sys.executable, server_script],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            if use_flags:
+                process = subprocess.Popen(
+                    [sys.executable, server_script, '--port', str(port)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+            else:
+                process = subprocess.Popen(
+                    [sys.executable, server_script],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
         
         # Give server time to start
         time.sleep(1)
@@ -44,13 +64,29 @@ def start_server(server_script, port):
         print(f"Error starting server: {e}")
         return None
 
-def start_client(client_script, host='localhost', port=None):
-    """Start a game client."""
+def start_client(client_script, host='localhost', port=None, use_flags=False):
+    """Start a game client.
+    
+    Args:
+        client_script: Path to the client script
+        host: Host address to connect to
+        port: Port number to connect to
+        use_flags: If True, use --host and --port flags (for client.py).
+                   If False, use positional arguments (for rps_client.py).
+    """
     try:
         if port:
-            subprocess.run([sys.executable, client_script, host, str(port)])
+            if use_flags:
+                # Use argparse flags for client.py
+                subprocess.run([sys.executable, client_script, '--host', host, '--port', str(port)])
+            else:
+                # Use positional arguments for rps_client.py
+                subprocess.run([sys.executable, client_script, host, str(port)])
         else:
-            subprocess.run([sys.executable, client_script, host])
+            if use_flags:
+                subprocess.run([sys.executable, client_script, '--host', host])
+            else:
+                subprocess.run([sys.executable, client_script, host])
     except KeyboardInterrupt:
         print("\nClient closed.")
     except Exception as e:
@@ -71,12 +107,12 @@ def main():
                 print("Note: You'll need to open another terminal/console to run a second client.")
                 
                 # Start server
-                server_process = start_server('server.py', 8888)
+                server_process = start_server('server.py', 8888, use_flags=True)
                 if server_process:
                     print("Tic-Tac-Toe server started on port 8888")
                     print("\nStarting client...")
                     print("="*50)
-                    start_client('client.py', 'localhost', 8888)
+                    start_client('client.py', 'localhost', 8888, use_flags=True)
                 else:
                     print("Failed to start server. Make sure port 8888 is available.")
             
