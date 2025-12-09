@@ -65,7 +65,7 @@ def start_server(server_script, port, use_flags=False):
         return None
 
 def start_client(client_script, host='localhost', port=None, use_flags=False):
-    """Start a game client.
+    """Start a game client in a separate terminal/process.
     
     Args:
         client_script: Path to the client script
@@ -75,22 +75,37 @@ def start_client(client_script, host='localhost', port=None, use_flags=False):
                    If False, use positional arguments (for rps_client.py).
     """
     try:
-        if port:
-            if use_flags:
-                # Use argparse flags for client.py
-                subprocess.run([sys.executable, client_script, '--host', host, '--port', str(port)])
+        if sys.platform == 'win32':
+            # Windows - start in new console window
+            if port:
+                if use_flags:
+                    subprocess.Popen(
+                        [sys.executable, client_script, '--host', host, '--port', str(port)],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                    )
+                else:
+                    subprocess.Popen(
+                        [sys.executable, client_script, host, str(port)],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                    )
             else:
-                # Use positional arguments for rps_client.py
-                subprocess.run([sys.executable, client_script, host, str(port)])
+                if use_flags:
+                    subprocess.Popen(
+                        [sys.executable, client_script, '--host', host],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                    )
+                else:
+                    subprocess.Popen(
+                        [sys.executable, client_script, host],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                    )
         else:
-            if use_flags:
-                subprocess.run([sys.executable, client_script, '--host', host])
-            else:
-                subprocess.run([sys.executable, client_script, host])
-    except KeyboardInterrupt:
-        print("\nClient closed.")
+            # Unix/Linux/Mac - can't easily create new terminal window
+            # Return False to indicate we should just show instructions
+            return False
     except Exception as e:
         print(f"Error starting client: {e}")
+        return False
 
 def main():
     """Main launcher function."""
@@ -109,10 +124,11 @@ def main():
                 # Start server
                 server_process = start_server('server.py', 8888, use_flags=True)
                 if server_process:
-                    print("Tic-Tac-Toe server started on port 8888")
-                    print("\nStarting client...")
-                    print("="*50)
-                    start_client('client.py', 'localhost', 8888, use_flags=True)
+                    print("✓ Tic-Tac-Toe server started on port 8888")
+                    print("\nTo start clients, open separate terminals and run:")
+                    print(f"  python3 client.py --host localhost --port 8888")
+                    print("\nServer is running in the background. Press Enter to return to menu...")
+                    input()
                 else:
                     print("Failed to start server. Make sure port 8888 is available.")
             
@@ -124,10 +140,11 @@ def main():
                 # Start server
                 server_process = start_server('rps_server.py', 8889)
                 if server_process:
-                    print("Rock Paper Scissors server started on port 8889")
-                    print("\nStarting client...")
-                    print("="*50)
-                    start_client('rps_client.py', 'localhost', 8889)
+                    print("✓ Rock Paper Scissors server started on port 8889")
+                    print("\nTo start clients, open separate terminals and run:")
+                    print(f"  python3 rps_client.py localhost 8889")
+                    print("\nServer is running in the background. Press Enter to return to menu...")
+                    input()
                 else:
                     print("Failed to start server. Make sure port 8889 is available.")
             

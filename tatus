@@ -1,0 +1,165 @@
+[1mdiff --git a/REPORT.md b/REPORT.md[m
+[1mindex fca00f5..843d737 100644[m
+[1m--- a/REPORT.md[m
+[1m+++ b/REPORT.md[m
+[36m@@ -1,827 +1,184 @@[m
+[31m-# Networked Tic-Tac-Toe Game - Project Report[m
+[32m+[m[32m# Networked Tic-Tac-Toe Project Report[m
+ [m
+ ## Introduction[m
+ [m
+[31m-This project implements a networked Tic-Tac-Toe game using Python's socket programming. The system consists of a server program that manages game sessions and multiple client programs that connect to play games. The server handles game logic, player matching, turn management, and win/draw detection, while clients provide a user-friendly interface for players to interact with the game.[m
+[31m-[m
+[31m-The implementation uses TCP sockets for reliable communication between clients and the server. The server can handle multiple concurrent games, automatically matching players into pairs. Each game maintains its own state, including the game board, current turn, and game status. Clients receive real-time updates about board changes, turn notifications, and game outcomes.[m
+[31m-[m
+[31m-This networked approach allows players to compete against each other over a network, making it a practical demonstration of client-server architecture and socket programming concepts.[m
+[32m+[m[32mThis project implements a simple networked Tic-Tac-Toe game consisting of a central server that manages games and clients that connect to play. The server pairs connected clients into games, enforces game rules, and relays board updates. Clients can be interactive (human input) or automated for demonstrations.[m
+ [m
+ ## Body[m
+ [m
+[31m-### Architecture Overview[m
+[31m-[m
+[31m-The system follows a client-server architecture:[m
+[31m-- **Server**: Manages all game logic, matches players, and maintains game state[m
+[31m-- **Client**: Connects to server, displays game board, accepts user input, and receives updates[m
+[31m-[m
+[31m-Communication between client and server uses JSON-formatted messages over TCP sockets, allowing for structured data exchange.[m
+[32m+[m[32m### Source Code[m
+ [m
+[31m-### Server Implementation[m
+[32m+[m[32mBelow are the source files used in the project. Each file is followed by an explanation of its purpose and key parts.[m
+ [m
+[31m-The server program (`server.py`) consists of three main classes:[m
+[32m+[m[32m---[m
+ [m
+[31m-1. **GameState Enum**: Represents the possible states of a game (WAITING, PLAYING, FINISHED)[m
+[31m-2. **TicTacToeGame Class**: Manages individual game instances[m
+[31m-3. **TicTacToeServer Class**: Handles client connections and game management[m
+[31m-[m
+[31m-#### Source Code: server.py[m
+[32m+[m[32m**`server.py`**[m
+ [m
+ ```python[m
+[31m-#!/usr/bin/env python3[m
+[31m-"""[m
+[31m-Tic-Tac-Toe Server[m
+[31m-Handles game logic and client connections for networked Tic-Tac-Toe games.[m
+[31m-"""[m
+[31m-[m
+[31m-import socket[m
+[31m-import threading[m
+[31m-import json[m
+[31m-from enum import Enum[m
+[31m-[m
+[31m-class GameState(Enum):[m
+[31m-    WAITING = "waiting"[m
+[31m-    PLAYING = "playing"[m
+[31m-    FINISHED = "finished"[m
+[31m-[m
+[31m-class TicTacToeGame:[m
+[31m-    """Represents a single Tic-Tac-Toe game instance."""[m
+[31m-    [m
+[31m-    def __init__(self, game_id):[m
+[31m-        self.game_id = game_id[m
+[31m-        self.board = [[' ' for _ in range(3)] for _ in range(3)][m
+[31m-        self.players = []  # List of (socket, address, symbol) tuples[m
+[31m-        self.current_turn = 0  # Index of player whose turn it is[m
+[31m-        self.state = GameState.WAITING[m
+[31m-        self.winner = None[m
+[31m-        [m
+[31m-    def add_player(self, client_socket, address):[m
+[31m-        """Add a player to the game. Returns True if game is ready to start."""[m
+[31m-        if len(self.players) < 2:[m
+[31m-            symbol = 'X' if len(self.players) == 0 else 'O'[m
+[31m-            self.players.append((client_socket, address, symbol))[m
+[31m-            [m
+[31m-            if len(self.players) == 2:[m
+[31m-                self.state = GameState.PLAYING[m
+[31m-                return True[m
+[31m-        return False[m
+[31m-    [m
+[31m-    def make_move(self, row, col, player_symbol):[m
+[31m-        """Attempt to make a move. Returns (success, message, game_over, winner)."""[m
+[31m-        if self.state != GameState.PLAYING:[m
+[31m-            return False, "Game is not in progress", False, None[m
+[31m-            [m
+[31m-        if self.players[self.current_turn][2] != player_symbol:[m
+[31m-            return False, "Not your turn", False, None[m
+[31m-            [m
+[31m-        if row < 0 or row >= 3 or col < 0 or col >= 3:[m
+[31m-            return False, "Invalid position", False, None[m
+[31m-            [m
+[31m-        if self.board[row][col] != ' ':[m
+[31m-            return False, "Position already taken", False, None[m
+[31m-            [m
+[31m-        # Make the move[m
+[31m-        self.board[row][col] = player_symbol[m
+[31m-        [m
+[31m-        # Check for win or draw[m
+[31m-        winner = self.check_winner()[m
+[31m-        if winner:[m
+[31m-            self.state = GameState.FINISHED[m
+[31m-            self.winner = winner[m
+[31m-            return True, "Move successful", True, winner[m
+[31m-        elif self.is_board_full():[m
+[31m-            self.state = GameState.FINISHED[m
+[31m-            return True, "Move successful", True, "DRAW"[m
+[31m-        else:[m
+[31m-            # Switch turn[m
+[31m-            self.current_turn = 1 - self.current_turn[m
+[31m-            return True, "Move successful", False, None[m
+[31m-    [m
+[31m-    def check_winner(self):[m
+[31m-        """Check if there's a winner. Returns 'X', 'O', or None."""[m
+[31m-        # Check rows[m
+[31m-        for row in self.board:[m
+[31m-            if row[0] == row[1] == row[2] != ' ':[m
+[31m-                return row[0][m
+[31m-        [m
+[31m-        # Check columns[m
+[31m-        for col in range(3):[m
+[31m-            if self.board[0][col] == self.board[1][col] == self.board[2][col] != ' ':[m
+[31m-                return self.board[0][col][m
+[31m-        [m
+[31m-        # Check diagonals[m
+[31m-        if self.board[0][0] == self.board[1][1] == self.board[2][2] != ' ':[m
+[31m-            return self.board[0][0][m
+[31m-        if self.board[0][2] == self.board[1][1] == self.board[2][0] != ' ':[m
+[31m-            return self.board[0][2][m
+[31m-        [m
+[31m-        return None[m
+[31m-    [m
+[31m-    def is_board_full(self):[m
+[31m-        """Check if the board is full."""[m
+[31m-        return all(self.board[i][j] != ' ' for i in range(3) for j in range(3))[m
+[31m-    [m
+[31m-    def get_board_string(self):[m
+[31m-        """Get a string representation of the board."""[m
+[31m-        lines = [][m
+[31m-        for i, row in enumerate(self.board):[m
+[31m-            lines.append(" | ".join(row))[m
+[31m-            if i < 2:[m
+[31m-                lines.append("-" * 9)[m
+[31m-        return "\n".join(lines)[m
+[31m-    [m
+[31m-    def get_status_message(self):[m
+[31m-        """Get a status message for the current game state."""[m
+[31m-        if self.state == GameState.WAITING:[m
+[31m-            return "Waiting for another player..."[m
+[31m-        elif self.state == GameState.FINISHED:[m
+[31m-            if self.winner == "DRAW":[m
+[31m-                return "Game ended in a DRAW!"[m
+[31m-            else:[m
+[31m-                return f"Game over! {self.winner} wins!"[m
+[31m-        else:[m
+[31m-            current_player = self.players[self.current_turn][2][m
+[31m-            return f"It's {current_player}'s turn"[m
+[31m-[m
+[31m-class TicTacToeServer:[m
+[31m-    """Main server class that handles client connections and game management."""[m
+[31m-    [m
+[31m-    def __init__(self, host='localhost', port=8888):[m
+[31m-        self.host = host[m
+[31m-        self.port = port[m
+[31m-        self.server_socket = None[m
+[31m-        self.games = {}  #
