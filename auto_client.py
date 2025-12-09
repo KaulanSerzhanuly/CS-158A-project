@@ -31,6 +31,24 @@ def run():
         s.connect((HOST, PORT))
         rfile = s.makefile('r')
         you = None
+        
+        # Request list of games from server
+        send_json(s, {'type': 'list'})
+        
+        # Wait for list response
+        while True:
+            line = rfile.readline()
+            if not line:
+                print('Server closed')
+                return
+            msg = json.loads(line)
+            if msg.get('type') == 'list':
+                break
+        
+        # Join the default tictactoe game
+        send_json(s, {'type': 'join', 'game': 'tictactoe'})
+        
+        # Now receive and handle game messages
         while True:
             line = rfile.readline()
             if not line:
@@ -38,7 +56,10 @@ def run():
                 break
             msg = json.loads(line)
             t = msg.get('type')
-            if t == 'start':
+            if t == 'joined':
+                print(f'Joined game: {msg.get("game")}')
+                continue
+            elif t == 'start':
                 you = msg.get('you')
                 print('Start. You are', you)
                 print_board(msg.get('board', [' ']*9))
